@@ -4,7 +4,8 @@ A native Haiku text editor for Markdown, RTF and plain text, built around a
 sidebar of linked files and folders. Files open in tabs.
 
 **Status:** early skeleton. Currently: open a folder, browse it in the sidebar,
-double-click a file to edit it as plain text in a tab, save, close tab.
+double-click a file to edit it as plain text in a tab, save, close tab. Unsaved changes are marked on the tab
+and prompted for on close/quit; the sidebar follows changes on disk.
 
 ## Build (on Haiku)
 
@@ -26,8 +27,8 @@ Requires the `haiku_devel` and `makefile_engine` packages.
 
 - Markdown preview (md4c), RTF via Haiku translators
 - Themes (light/dark), starting from system colors
-- Node monitoring and lazy loading in the sidebar
-- Unsaved-changes prompts, Hebrew translation
+- Lazy loading in the sidebar (currently eager, capped at 1000 folders)
+- Hebrew translation
 
 ## Publishing to HaikuDepot
 

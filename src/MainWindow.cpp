@@ -13,6 +13,7 @@
 #include <Menu.h>
 #include <MenuBar.h>
 #include <MenuItem.h>
+#include <String.h>
 #include <ScrollView.h>
 #include <TabView.h>
 
@@ -103,6 +104,10 @@ MainWindow::MessageReceived(BMessage* message)
 			_CloseCurrentTab();
 			break;
 
+		case MSG_MODIFIED_CHANGED:
+			_UpdateTabLabels();
+			break;
+
 		default:
 			BWindow::MessageReceived(message);
 			break;
@@ -113,7 +118,17 @@ MainWindow::MessageReceived(BMessage* message)
 bool
 MainWindow::QuitRequested()
 {
-	// TODO: ask to save modified tabs before quitting.
+	for (int32 i = 0; i < fTabView->CountTabs(); i++) {
+		EditorView* editor
+			= dynamic_cast<EditorView*>(fTabView->TabAt(i)->View());
+		if (editor == NULL || !editor->IsModified())
+			continue;
+
+		fTabView->Select(i);
+		if (!_ConfirmClose(editor))
+			return false;
+	}
+
 	be_app->PostMessage(B_QUIT_REQUESTED);
 	return true;
 }
@@ -163,6 +178,7 @@ MainWindow::_OpenFile(const entry_ref& ref)
 		return;
 	}
 
+	editor->TextView()->SetNotifyTarget(BMessenger(this));
 	fTabView->AddTab(editor);
 	fTabView->Select(fTabView->CountTabs() - 1);
 }
@@ -191,7 +207,10 @@ MainWindow::_CloseCurrentTab()
 	if (selection < 0)
 		return;
 
-	// TODO: ask to save if the text was modified.
+	EditorView* editor = _CurrentEditor();
+	if (editor != NULL && !_ConfirmClose(editor))
+		return;
+
 	// The caller owns the removed tab; deleting it also deletes its view.
 	BTab* tab = fTabView->RemoveTab(selection);
 	delete tab;
@@ -205,4 +224,60 @@ MainWindow::_CurrentEditor() const
 	if (selection < 0)
 		return NULL;
 	return dynamic_cast<EditorView*>(fTabView->TabAt(selection)->View());
+}
+
+
+// Asks what to do with unsaved changes. Returns false if closing should be
+// aborted (user cancelled, or saving failed).
+bool
+MainWindow::_ConfirmClose(EditorView* editor)
+{
+	if (!editor->IsModified())
+		return true;
+
+	BString text;
+	text.SetToFormat(B_TRANSLATE("Save changes to \"%s\" before closing?"),
+		editor->Ref().name);
+
+	BAlert* alert = new BAlert(B_TRANSLATE("Unsaved changes"), text.String(),
+		B_TRANSLATE("Cancel"), B_TRANSLATE("Don't save"), B_TRANSLATE("Save"),
+		B_WIDTH_AS_USUAL, B_OFFSET_SPACING, B_WARNING_ALERT);
+	alert->SetShortcut(0, B_ESCAPE);
+
+	switch (alert->Go()) {
+		case 0:
+			return false;
+		case 2:
+			if (editor->Save() != B_OK) {
+				BAlert* error = new BAlert(B_TRANSLATE("Error"),
+					B_TRANSLATE("Could not save the file."),
+					B_TRANSLATE("OK"), NULL, NULL, B_WIDTH_AS_USUAL,
+					B_STOP_ALERT);
+				error->Go();
+				return false;
+			}
+			return true;
+		default:
+			return true;
+	}
+}
+
+
+// Show a bullet in front of the names of tabs with unsaved changes.
+void
+MainWindow::_UpdateTabLabels()
+{
+	for (int32 i = 0; i < fTabView->CountTabs(); i++) {
+		BTab* tab = fTabView->TabAt(i);
+		EditorView* editor = dynamic_cast<EditorView*>(tab->View());
+		if (editor == NULL)
+			continue;
+
+		BString label;
+		if (editor->IsModified())
+			label << B_UTF8_BULLET << " ";
+		label << editor->Ref().name;
+		tab->SetLabel(label.String());
+	}
+	fTabView->Invalidate();
 }

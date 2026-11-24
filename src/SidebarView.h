@@ -9,6 +9,11 @@
 #include <ListItem.h>
 #include <OutlineListView.h>
 
+#include <set>
+#include <string>
+
+class BMessageRunner;
+
 
 class FileItem : public BStringItem {
 public:
@@ -24,20 +29,32 @@ private:
 };
 
 
-// Folder tree shown on the left of the window.
-// TODO: lazy loading + node monitoring so the tree follows disk changes.
+// Folder tree shown on the left of the window. Every loaded directory is
+// watched with the node monitor; changes rebuild the tree (debounced) while
+// keeping expanded folders and the selection.
+// TODO: lazy loading (load a folder's children when first expanded).
 class SidebarView : public BOutlineListView {
 public:
 								SidebarView(const char* name);
 	virtual						~SidebarView();
 
+	virtual	void				MessageReceived(BMessage* message);
+
 			void				SetFolder(const entry_ref& folder);
 			FileItem*			SelectedItem() const;
 
 private:
+			void				_Rebuild();
+			void				_Refresh();
+			void				_ScheduleRefresh();
 			void				_Clear();
 			void				_AddDirectory(const entry_ref& dir,
 									FileItem* parent, int depth);
+
+			entry_ref			fRoot;
+			std::set<std::string> fExpandedPaths;
+			int					fDirectoryCount;
+			BMessageRunner*		fRefreshRunner;
 };
 
 #endif	// SIDEBAR_VIEW_H

@@ -28,6 +28,8 @@ private:
 			void				_SaveCurrent();
 			void				_CloseCurrentTab();
 			EditorView*			_CurrentEditor() const;
+			bool				_ConfirmClose(EditorView* editor);
+			void				_UpdateTabLabels();
 
 			BMenuBar*			fMenuBar;
 			SidebarView*		fSidebar;
