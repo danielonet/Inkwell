@@ -27,7 +27,6 @@ Requires the `haiku_devel` and `makefile_engine` packages.
 
 - Markdown preview (md4c), RTF via Haiku translators
 - Themes (light/dark), starting from system colors
-- Lazy loading in the sidebar (currently eager, capped at 1000 folders)
 - Hebrew translation
 
 ## Publishing to HaikuDepot

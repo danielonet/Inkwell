@@ -16,9 +16,6 @@
 #include <vector>
 
 
-static const int kMaxDepth = 8;
-// The system limits how many nodes a team may watch, so stop well short.
-static const int kMaxDirectories = 1000;
 static const bigtime_t kRefreshDelay = 300000;	// 0.3 s debounce
 
 enum {
@@ -30,7 +27,8 @@ FileItem::FileItem(const entry_ref& ref, bool isDirectory, bool expanded)
 	:
 	BStringItem(ref.name, 0, expanded),
 	fRef(ref),
-	fIsDirectory(isDirectory)
+	fIsDirectory(isDirectory),
+	fLoaded(false)
 {
 }
 
@@ -66,7 +64,6 @@ PathOf(const entry_ref& ref)
 SidebarView::SidebarView(const char* name)
 	:
 	BOutlineListView(name, B_SINGLE_SELECTION_LIST),
-	fDirectoryCount(0),
 	fRefreshRunner(NULL)
 {
 }
@@ -101,6 +98,24 @@ SidebarView::MessageReceived(BMessage* message)
 }
 
 
+// Expanding happens inside the base class; look for newly expanded, not yet
+// loaded folders afterwards.
+void
+SidebarView::MouseDown(BPoint where)
+{
+	BOutlineListView::MouseDown(where);
+	_LoadExpanded();
+}
+
+
+void
+SidebarView::KeyDown(const char* bytes, int32 numBytes)
+{
+	BOutlineListView::KeyDown(bytes, numBytes);
+	_LoadExpanded();
+}
+
+
 void
 SidebarView::SetFolder(const entry_ref& folder)
 {
@@ -125,14 +140,13 @@ SidebarView::_Rebuild()
 {
 	stop_watching(this);
 	_Clear();
-	fDirectoryCount = 0;
 
 	if (fRoot.device < 0)
 		return;
 
 	FileItem* root = new FileItem(fRoot, true, true);
 	AddItem(root);
-	_AddDirectory(fRoot, root, 0);
+	_LoadChildren(root);
 }
 
 
@@ -187,26 +201,58 @@ SidebarView::_ScheduleRefresh()
 void
 SidebarView::_Clear()
 {
-	// BOutlineListView::MakeEmpty() does not delete the items.
-	while (BListItem* item = FullListItemAt(0)) {
-		RemoveItem(item);
-		delete item;
+	// RemoveItem() on a parent drops its subitems from the list without
+	// deleting them, so collect every item first and delete them all.
+	std::vector<BListItem*> items;
+	for (int32 i = 0; i < FullListCountItems(); i++)
+		items.push_back(FullListItemAt(i));
+
+	MakeEmpty();
+	for (size_t i = 0; i < items.size(); i++)
+		delete items[i];
+}
+
+
+// Reads a folder's contents from disk and starts watching it.
+void
+SidebarView::_LoadChildren(FileItem* directoryItem)
+{
+	if (directoryItem->IsLoaded())
+		return;
+	directoryItem->SetLoaded(true);
+
+	// Drop the placeholder that made the folder expandable.
+	while (BListItem* placeholder = ItemUnderAt(directoryItem, true, 0)) {
+		RemoveItem(placeholder);
+		delete placeholder;
+	}
+
+	_AddDirectory(directoryItem);
+}
+
+
+// Load folders the user has just expanded.
+void
+SidebarView::_LoadExpanded()
+{
+	for (int32 i = 0; i < FullListCountItems(); i++) {
+		FileItem* item = dynamic_cast<FileItem*>(FullListItemAt(i));
+		if (item != NULL && item->IsDirectory() && item->IsExpanded()
+			&& !item->IsLoaded()) {
+			_LoadChildren(item);
+		}
 	}
 }
 
 
 void
-SidebarView::_AddDirectory(const entry_ref& dirRef, FileItem* parent,
-	int depth)
+SidebarView::_AddDirectory(FileItem* parent)
 {
-	if (fDirectoryCount >= kMaxDirectories)
-		return;
-
-	BDirectory directory(&dirRef);
+	BDirectory directory(&parent->Ref());
 	if (directory.InitCheck() != B_OK)
 		return;
-	fDirectoryCount++;
 
+	// Failing to watch (e.g. watch limit reached) only costs live updates.
 	node_ref nodeRef;
 	if (directory.GetNodeRef(&nodeRef) == B_OK)
 		watch_node(&nodeRef, B_WATCH_DIRECTORY, this);
@@ -232,7 +278,12 @@ SidebarView::_AddDirectory(const entry_ref& dirRef, FileItem* parent,
 		FileItem* item = new FileItem(entries[i].ref, entries[i].isDirectory,
 			expanded);
 		AddUnder(item, parent);
-		if (entries[i].isDirectory && depth < kMaxDepth)
-			_AddDirectory(entries[i].ref, item, depth + 1);
+
+		if (!entries[i].isDirectory)
+			continue;
+		if (expanded)
+			_LoadChildren(item);
+		else
+			AddUnder(new BStringItem(B_UTF8_ELLIPSIS), item);
 	}
 }
