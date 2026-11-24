@@ -6,9 +6,19 @@
 #include "EditorView.h"
 
 #include <File.h>
+#include <LayoutBuilder.h>
 #include <Message.h>
+#include <MessageRunner.h>
+#include <ScrollView.h>
+#include <SplitView.h>
 
+#include <strings.h>
 #include <string>
+
+#include "MarkdownView.h"
+
+
+static const bigtime_t kPreviewDelay = 250000;	// 0.25 s after the last edit
 
 
 // #pragma mark - EditorText
@@ -42,11 +52,20 @@ EditorText::SetNotifyTarget(const BMessenger& target)
 
 
 void
+EditorText::SetChangeTarget(const BMessenger& target)
+{
+	fChangeTarget = target;
+}
+
+
+void
 EditorText::InsertText(const char* text, int32 length, int32 offset,
 	const text_run_array* runs)
 {
 	BTextView::InsertText(text, length, offset, runs);
 	SetModified(true);
+	if (fChangeTarget.IsValid())
+		fChangeTarget.SendMessage(MSG_TEXT_CHANGED);
 }
 
 
@@ -55,36 +74,140 @@ EditorText::DeleteText(int32 fromOffset, int32 toOffset)
 {
 	BTextView::DeleteText(fromOffset, toOffset);
 	SetModified(true);
+	if (fChangeTarget.IsValid())
+		fChangeTarget.SendMessage(MSG_TEXT_CHANGED);
 }
 
 
 // #pragma mark - EditorView
 
 
-EditorView::EditorView(const entry_ref& ref)
-	:
-	BScrollView(ref.name, new EditorText("text"),
-		B_WILL_DRAW | B_FRAME_EVENTS, false, true, B_FANCY_BORDER),
-	fRef(ref)
+static bool
+IsMarkdownName(const char* name)
 {
-	EditorText* text = TextView();
-	text->SetWordWrap(true);
-	text->SetStylable(false);
-	text->SetFontAndColor(be_fixed_font);
+	const char* dot = strrchr(name, '.');
+	if (dot == NULL)
+		return false;
+	return strcasecmp(dot, ".md") == 0 || strcasecmp(dot, ".markdown") == 0
+		|| strcasecmp(dot, ".mdown") == 0 || strcasecmp(dot, ".mkd") == 0;
 }
 
 
-EditorText*
-EditorView::TextView() const
+EditorView::EditorView(const entry_ref& ref)
+	:
+	BView(ref.name, B_FRAME_EVENTS),
+	fRef(ref),
+	fText(new EditorText("text")),
+	fTextScroll(NULL),
+	fPreview(NULL),
+	fPreviewScroll(NULL),
+	fPreviewShown(false),
+	fPreviewRunner(NULL)
 {
-	return static_cast<EditorText*>(Target());
+	fText->SetWordWrap(true);
+	fText->SetStylable(false);
+	fText->SetFontAndColor(be_fixed_font);
+
+	fTextScroll = new BScrollView("editor scroll", fText,
+		B_WILL_DRAW | B_FRAME_EVENTS, false, true, B_FANCY_BORDER);
+
+	if (IsMarkdownName(ref.name)) {
+		fPreview = new MarkdownView("preview");
+		fPreviewScroll = new BScrollView("preview scroll", fPreview,
+			B_WILL_DRAW | B_FRAME_EVENTS, false, true, B_FANCY_BORDER);
+		fPreviewShown = true;
+
+		BSplitView* split = new BSplitView(B_HORIZONTAL, 0);
+		split->AddChild(fTextScroll, 1);
+		split->AddChild(fPreviewScroll, 1);
+		BLayoutBuilder::Group<>(this, B_VERTICAL, 0).Add(split);
+	} else {
+		BLayoutBuilder::Group<>(this, B_VERTICAL, 0).Add(fTextScroll);
+	}
+}
+
+
+EditorView::~EditorView()
+{
+	delete fPreviewRunner;
+}
+
+
+void
+EditorView::AttachedToWindow()
+{
+	BView::AttachedToWindow();
+	if (fPreview != NULL)
+		fText->SetChangeTarget(BMessenger(this));
+}
+
+
+void
+EditorView::MessageReceived(BMessage* message)
+{
+	switch (message->what) {
+		case MSG_TEXT_CHANGED:
+			_SchedulePreviewUpdate();
+			break;
+
+		case MSG_PREVIEW_UPDATE:
+			delete fPreviewRunner;
+			fPreviewRunner = NULL;
+			_UpdatePreview();
+			break;
+
+		default:
+			BView::MessageReceived(message);
+			break;
+	}
 }
 
 
 bool
 EditorView::IsModified() const
 {
-	return TextView()->IsModified();
+	return fText->IsModified();
+}
+
+
+void
+EditorView::SetPreviewShown(bool show)
+{
+	if (fPreview == NULL || show == fPreviewShown)
+		return;
+
+	fPreviewShown = show;
+	if (show) {
+		fPreviewScroll->Show();
+		_UpdatePreview();
+	} else
+		fPreviewScroll->Hide();
+}
+
+
+// Typing fires many edits; render once they pause.
+void
+EditorView::_SchedulePreviewUpdate()
+{
+	if (!fPreviewShown || fPreviewRunner != NULL)
+		return;
+
+	BMessage update(MSG_PREVIEW_UPDATE);
+	fPreviewRunner = new BMessageRunner(BMessenger(this), &update,
+		kPreviewDelay, 1);
+	if (fPreviewRunner->InitCheck() != B_OK) {
+		delete fPreviewRunner;
+		fPreviewRunner = NULL;
+	}
+}
+
+
+void
+EditorView::_UpdatePreview()
+{
+	if (fPreview == NULL || !fPreviewShown)
+		return;
+	fPreview->SetMarkdown(fText->Text(), (size_t)fText->TextLength());
 }
 
 
@@ -109,9 +232,9 @@ EditorView::Load()
 		buffer.resize((size_t)read);
 	}
 
-	EditorText* text = TextView();
-	text->SetText(buffer.c_str(), (int32)buffer.size());
-	text->SetModified(false);
+	fText->SetText(buffer.c_str(), (int32)buffer.size());
+	fText->SetModified(false);
+	_UpdatePreview();
 	return B_OK;
 }
 
@@ -124,11 +247,10 @@ EditorView::Save()
 	if (status != B_OK)
 		return status;
 
-	EditorText* text = TextView();
-	ssize_t written = file.Write(text->Text(), (size_t)text->TextLength());
+	ssize_t written = file.Write(fText->Text(), (size_t)fText->TextLength());
 	if (written < 0)
 		return (status_t)written;
 
-	text->SetModified(false);
+	fText->SetModified(false);
 	return B_OK;
 }

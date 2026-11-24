@@ -4,7 +4,8 @@ A native Haiku text editor for Markdown, RTF and plain text, built around a
 sidebar of linked files and folders. Files open in tabs.
 
 **Status:** early skeleton. Currently: open a folder, browse it in the sidebar,
-double-click a file to edit it as plain text in a tab, save, close tab. Unsaved changes are marked on the tab
+double-click a file to edit it in a tab (Markdown files get a live preview
+beside the editor, View ▸ Markdown preview, ⌘P), save, close tab. Unsaved changes are marked on the tab
 and prompted for on close/quit; the sidebar follows changes on disk.
 
 ## Build (on Haiku)
@@ -14,9 +15,15 @@ Requires the `haiku_devel` and `makefile_engine` packages.
     make
     ./objects.*/Inkwell
 
+## Tests
+
+The Markdown renderer has no Haiku dependencies and is tested anywhere:
+
+    make -C tests test
+
 ## Layout
 
-- `src/` – C++ sources (Interface Kit, Locale Kit)
+- `src/` – C++ sources (Interface Kit, Locale Kit); `MarkdownRender.*` is pure C++
 - `Inkwell.rdef` – app signature (`application/x-vnd.Inkwell`), version, icon
 - `Makefile` – uses Haiku's makefile-engine
 - `packaging/inkwell-0.1.0.recipe` – draft HaikuPorts recipe
@@ -25,7 +32,8 @@ Requires the `haiku_devel` and `makefile_engine` packages.
 
 ## Roadmap
 
-- Markdown preview (md4c), RTF via Haiku translators
+- Markdown: clickable links, tables, nested quotes, list continuation lines
+- RTF via Haiku translators
 - Themes (light/dark), starting from system colors
 - Hebrew translation
 

@@ -12,7 +12,8 @@ CHECKSUM_SHA256="TODO"
 SOURCE_FILENAME="inkwell-$portVersion.tar.gz"
 SOURCE_DIR="Inkwell-$portVersion"
 
-ARCHITECTURES="all ?x86"
+# Uses C++11 and the STL, so no x86_gcc2.
+ARCHITECTURES="x86_64 ?arm64 ?riscv64"
 
 PROVIDES="
 	inkwell = $portVersion

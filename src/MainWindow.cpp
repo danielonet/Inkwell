@@ -29,7 +29,8 @@ enum {
 	MSG_FOLDER_CHOSEN	= 'fdch',
 	MSG_OPEN_ITEM		= 'opit',
 	MSG_SAVE			= 'save',
-	MSG_CLOSE_TAB		= 'clst'
+	MSG_CLOSE_TAB		= 'clst',
+	MSG_TOGGLE_PREVIEW	= 'tgpv'
 };
 
 
@@ -40,6 +41,7 @@ MainWindow::MainWindow()
 	fMenuBar(NULL),
 	fSidebar(NULL),
 	fTabView(NULL),
+	fPreviewItem(NULL),
 	fFolderPanel(NULL)
 {
 	fMenuBar = _BuildMenuBar();
@@ -104,6 +106,14 @@ MainWindow::MessageReceived(BMessage* message)
 			_CloseCurrentTab();
 			break;
 
+		case MSG_TOGGLE_PREVIEW:
+		{
+			EditorView* editor = _CurrentEditor();
+			if (editor != NULL && editor->IsMarkdown())
+				editor->SetPreviewShown(!editor->IsPreviewShown());
+			break;
+		}
+
 		case MSG_MODIFIED_CHANGED:
 			_UpdateTabLabels();
 			break;
@@ -134,6 +144,19 @@ MainWindow::QuitRequested()
 }
 
 
+// The preview toggle only applies to the current tab, if it is Markdown.
+void
+MainWindow::MenusBeginning()
+{
+	BWindow::MenusBeginning();
+
+	EditorView* editor = _CurrentEditor();
+	bool markdown = editor != NULL && editor->IsMarkdown();
+	fPreviewItem->SetEnabled(markdown);
+	fPreviewItem->SetMarked(markdown && editor->IsPreviewShown());
+}
+
+
 BMenuBar*
 MainWindow::_BuildMenuBar()
 {
@@ -150,6 +173,12 @@ MainWindow::_BuildMenuBar()
 	fileMenu->AddItem(new BMenuItem(B_TRANSLATE("Quit"),
 		new BMessage(B_QUIT_REQUESTED), 'Q'));
 	bar->AddItem(fileMenu);
+
+	BMenu* viewMenu = new BMenu(B_TRANSLATE("View"));
+	fPreviewItem = new BMenuItem(B_TRANSLATE("Markdown preview"),
+		new BMessage(MSG_TOGGLE_PREVIEW), 'P');
+	viewMenu->AddItem(fPreviewItem);
+	bar->AddItem(viewMenu);
 
 	return bar;
 }

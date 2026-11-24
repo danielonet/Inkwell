@@ -9,6 +9,7 @@
 
 class BFilePanel;
 class BMenuBar;
+class BMenuItem;
 class BTabView;
 class EditorView;
 class SidebarView;
@@ -21,6 +22,7 @@ public:
 
 	virtual	void				MessageReceived(BMessage* message);
 	virtual	bool				QuitRequested();
+	virtual	void				MenusBeginning();
 
 private:
 			BMenuBar*			_BuildMenuBar();
@@ -34,6 +36,7 @@ private:
 			BMenuBar*			fMenuBar;
 			SidebarView*		fSidebar;
 			BTabView*			fTabView;
+			BMenuItem*			fPreviewItem;
 			BFilePanel*			fFolderPanel;
 };
 
