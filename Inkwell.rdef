@@ -14,5 +14,7 @@ resource app_version {
 	long_info = "Inkwell - a text editor for Markdown, RTF and plain text."
 };
 
-// TODO: draw an icon in Icon-O-Matic, export as HVIF "C++ source" or RDef,
-// and add it here as:  resource vector_icon { $"..." };
+// TODO: icon. Source artwork is in artwork/ (PNG only). Haiku needs HVIF:
+// trace artwork/inkwell-master-512.png in Icon-O-Matic (simplify the small
+// sizes), export as "RDef", and paste it here as:
+//   resource vector_icon { $"..." };

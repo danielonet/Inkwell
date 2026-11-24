@@ -19,6 +19,7 @@ Requires the `haiku_devel` and `makefile_engine` packages.
 - `Inkwell.rdef` – app signature (`application/x-vnd.Inkwell`), version, icon
 - `Makefile` – uses Haiku's makefile-engine
 - `packaging/inkwell-0.1.0.recipe` – draft HaikuPorts recipe
+- `artwork/` – icon PNGs (master 512px + 256/128/64/32/16); HVIF still to be traced
 - `locales/` – translation catalogs (`.catkeys`), added later
 
 ## Roadmap
