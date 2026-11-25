@@ -127,8 +127,8 @@ main()
 	}
 	{
 		// Underscores between non-ASCII letters (UTF-8) are not emphasis.
-		Document d = Render("caf\xC3\xA9_cr\xC3\xA8me_br\xC3\xBBl\xC3\xA9e");
-		CHECK(d.text == "caf\xC3\xA9_cr\xC3\xA8me_br\xC3\xBBl\xC3\xA9e\n");
+		Document d = Render("caf\xC3\xA9" "_cr\xC3\xA8" "me_br\xC3\xBB" "l\xC3\xA9" "e");
+		CHECK(d.text == "caf\xC3\xA9" "_cr\xC3\xA8" "me_br\xC3\xBB" "l\xC3\xA9" "e\n");
 	}
 	{
 		Document d = Render("");
