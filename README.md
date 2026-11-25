@@ -25,6 +25,8 @@ sidebar of linked files and folders. Files open in tabs.
 
 ## Build (on Haiku)
 
+Full instructions: [doc/building-on-haiku.md](doc/building-on-haiku.md).
+
 Requires the `haiku_devel` and `makefile_engine` packages.
 
     make
@@ -51,6 +53,7 @@ Haiku dependencies and are tested anywhere:
 
 ## Layout
 
+- `doc/` – installation, build and usage guide for Haiku
 - `src/` – C++ sources (Interface Kit, Locale Kit); `MarkdownRender.*`, `Rtf.*` and `Spell.*` are pure C++
 - `Inkwell.rdef` – app signature (`application/x-vnd.Inkwell`), version, icon
 - `Makefile` – uses Haiku's makefile-engine
