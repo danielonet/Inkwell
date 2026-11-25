@@ -11,7 +11,12 @@ SRCS = \
 	src/SidebarView.cpp \
 	src/EditorView.cpp \
 	src/MarkdownRender.cpp \
-	src/MarkdownView.cpp
+	src/MarkdownView.cpp \
+	src/Rtf.cpp \
+	src/Settings.cpp \
+	src/Spell.cpp \
+	src/SpellService.cpp \
+	src/Theme.cpp
 
 RDEFS = Inkwell.rdef
 
@@ -20,7 +25,7 @@ LIBS = be tracker localestub $(STDCPPLIBS)
 LIBPATHS =
 LOCAL_INCLUDE_PATHS = src
 
-# Add language codes here once locales/<code>.catkeys exist, e.g. LOCALES = en he
+# Add language codes here once locales/<code>.catkeys exist, e.g. LOCALES = en
 LOCALES =
 
 OPTIMIZE := FULL

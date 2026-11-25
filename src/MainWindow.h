@@ -8,6 +8,7 @@
 #include <Window.h>
 
 class BFilePanel;
+class BMenu;
 class BMenuBar;
 class BMenuItem;
 class BTabView;
@@ -31,12 +32,20 @@ private:
 			void				_CloseCurrentTab();
 			EditorView*			_CurrentEditor() const;
 			bool				_ConfirmClose(EditorView* editor);
+			void				_OpenLink(const char* url);
+			void				_SetTheme(int index);
+			void				_RefreshSpelling();
 			void				_UpdateTabLabels();
 
 			BMenuBar*			fMenuBar;
 			SidebarView*		fSidebar;
 			BTabView*			fTabView;
 			BMenuItem*			fPreviewItem;
+			BMenu*				fThemeMenu;
+			BMenu*				fFormatMenu;
+			BMenuItem*			fSpellItem;
+			BMenu*				fLanguageMenu;
+			int					fThemeIndex;
 			BFilePanel*			fFolderPanel;
 };
 
