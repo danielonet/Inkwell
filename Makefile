@@ -11,7 +11,10 @@ SRCS = \
 	src/SidebarView.cpp \
 	src/EditorView.cpp \
 	src/MarkdownRender.cpp \
-	src/MarkdownView.cpp
+	src/MarkdownView.cpp \
+	src/Rtf.cpp \
+	src/Settings.cpp \
+	src/Theme.cpp
 
 RDEFS = Inkwell.rdef
 

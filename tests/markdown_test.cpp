@@ -74,6 +74,22 @@ main()
 		CHECK(StyleAt(d, "the site", &s) && s.link);
 		CHECK(StyleAt(d, "now", &s) && !s.link);
 		CHECK(StyleAt(d, "pic", &s) && s.italic && !s.link);
+		CHECK(StyleAt(d, "the site", &s) && s.url == 0);
+		CHECK(d.urls.size() == 1 && d.urls[0] == "http://x.org/a_(b)");
+		CHECK(StyleAt(d, "now", &s) && s.url == -1);
+	}
+	{
+		Document d = Render("[a](one.md \"Title\") [b](<two words.md>) <https://h.org/x> 1 < 2");
+		CHECK(d.text == "a b https://h.org/x 1 < 2\n");
+		CHECK(d.urls.size() == 3);
+		CHECK(d.urls[0] == "one.md");
+		CHECK(d.urls[1] == "two words.md");
+		CHECK(d.urls[2] == "https://h.org/x");
+		CHECK(StyleAt(d, "https", &s) && s.link && s.url == 2);
+		CHECK(StyleAt(d, "< 2", &s) && !s.link);
+		// Adjacent links with different targets must be separate runs.
+		Document e = Render("[a](x)[b](y)");
+		CHECK(e.runs.size() == 3 && e.urls.size() == 2);
 	}
 	{
 		Document d = Render("- one\n- two\n  - nested\n\n1. first\n2. second\n");

@@ -3,10 +3,19 @@
 A native Haiku text editor for Markdown, RTF and plain text, built around a
 sidebar of linked files and folders. Files open in tabs.
 
-**Status:** early skeleton. Currently: open a folder, browse it in the sidebar,
-double-click a file to edit it in a tab (Markdown files get a live preview
-beside the editor, View ▸ Markdown preview, ⌘P), save, close tab. Unsaved changes are marked on the tab
-and prompted for on close/quit; the sidebar follows changes on disk.
+**Status:** early, builds untested on real Haiku so far.
+
+- Open a folder; the sidebar loads folders lazily and follows changes on disk.
+- Files open in tabs; unsaved changes are marked and prompted for.
+- **Markdown** (`.md`): live preview beside the editor (View ▸ Markdown
+  preview, ⌘P). Links are clickable: web/mail links open in the preferred
+  app, relative links open the file in a new tab.
+- **RTF** (`.rtf`): edited as rich text, Format menu for bold (⌘B), italic
+  (⌘I), underline (⌘U) and size (⌘+ / ⌘-). Fonts families, paragraph
+  formatting, images and tables are not preserved.
+- **Themes** (View ▸ Theme): System colors, Light, Dark, Sepia. Applies to the
+  editor and preview, not to the sidebar or window chrome; remembered in
+  `~/config/settings/Inkwell_settings`.
 
 ## Build (on Haiku)
 
@@ -17,13 +26,14 @@ Requires the `haiku_devel` and `makefile_engine` packages.
 
 ## Tests
 
-The Markdown renderer has no Haiku dependencies and is tested anywhere:
+The Markdown renderer and the RTF reader/writer have no Haiku dependencies
+and are tested anywhere:
 
     make -C tests test
 
 ## Layout
 
-- `src/` – C++ sources (Interface Kit, Locale Kit); `MarkdownRender.*` is pure C++
+- `src/` – C++ sources (Interface Kit, Locale Kit); `MarkdownRender.*` and `Rtf.*` are pure C++
 - `Inkwell.rdef` – app signature (`application/x-vnd.Inkwell`), version, icon
 - `Makefile` – uses Haiku's makefile-engine
 - `packaging/inkwell-0.1.0.recipe` – draft HaikuPorts recipe
@@ -32,9 +42,9 @@ The Markdown renderer has no Haiku dependencies and is tested anywhere:
 
 ## Roadmap
 
-- Markdown: clickable links, tables, nested quotes, list continuation lines
-- RTF via Haiku translators
-- Themes (light/dark), starting from system colors
+- Markdown: tables, nested quotes, list continuation lines
+- RTF: font families, text color and alignment commands
+- Themes: sidebar and window chrome, more palettes
 - Hebrew translation
 
 ## Publishing to HaikuDepot

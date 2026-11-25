@@ -5,15 +5,13 @@
 
 #include "MarkdownView.h"
 
-#include <Font.h>
 #include <InterfaceDefs.h>
+#include <Message.h>
 #include <ScrollBar.h>
 #include <ScrollView.h>
+#include <Window.h>
 
 #include <stdlib.h>
-#include <string>
-
-#include "MarkdownRender.h"
 
 
 static const float kHeadingScale[7] = {
@@ -41,33 +39,88 @@ FontFor(const markdown::Style& style)
 }
 
 
-static rgb_color
-ColorFor(const markdown::Style& style)
-{
-	rgb_color text = ui_color(B_DOCUMENT_TEXT_COLOR);
-	if (style.link)
-		return ui_color(B_LINK_TEXT_COLOR);
-	if (style.quote)
-		return tint_color(text, B_DISABLED_LABEL_TINT);
-	return text;
-}
-
-
 MarkdownView::MarkdownView(const char* name)
 	:
-	BTextView(name)
+	BTextView(name),
+	fLinkCursor(B_CURSOR_ID_FOLLOW_LINK)
 {
 	MakeEditable(false);
 	SetStylable(true);
 	SetWordWrap(true);
 	SetInsets(12, 8, 12, 8);
+
+	SetTheme(ThemeAt(0));
 }
 
 
 void
 MarkdownView::SetMarkdown(const char* text, size_t length)
 {
-	markdown::Document doc = markdown::Render(std::string(text, length));
+	fSource.assign(text, length);
+	_Render();
+}
+
+
+void
+MarkdownView::SetTheme(const Theme& theme)
+{
+	fTextColor = theme.text;
+	fLinkColor = theme.link;
+	fQuoteColor = theme.quote;
+	SetViewColor(theme.background);
+	SetLowColor(theme.background);
+
+	_Render();
+	Invalidate();
+}
+
+
+void
+MarkdownView::SetLinkTarget(const BMessenger& target)
+{
+	fLinkTarget = target;
+}
+
+
+void
+MarkdownView::MouseDown(BPoint where)
+{
+	uint32 buttons = 0;
+	BMessage* current = Window() != NULL ? Window()->CurrentMessage() : NULL;
+	if (current != NULL)
+		current->FindInt32("buttons", (int32*)&buttons);
+
+	// Activate links immediately, like a browser; everything else (text
+	// selection) is left to BTextView.
+	const std::string* url = _UrlAt(where);
+	if (url != NULL && (buttons & B_PRIMARY_MOUSE_BUTTON) != 0) {
+		BMessage message(MSG_LINK_CLICKED);
+		message.AddString("url", url->c_str());
+		fLinkTarget.SendMessage(&message);
+		return;
+	}
+
+	BTextView::MouseDown(where);
+}
+
+
+void
+MarkdownView::MouseMoved(BPoint where, uint32 transit,
+	const BMessage* dragMessage)
+{
+	BTextView::MouseMoved(where, transit, dragMessage);
+
+	if (transit != B_EXITED_VIEW && _UrlAt(where) != NULL)
+		SetViewCursor(&fLinkCursor);
+}
+
+
+void
+MarkdownView::_Render()
+{
+	markdown::Document doc = markdown::Render(fSource);
+	fRuns = doc.runs;
+	fUrls = doc.urls;
 
 	size_t count = doc.runs.size();
 	if (count == 0) {
@@ -82,9 +135,11 @@ MarkdownView::SetMarkdown(const char* text, size_t length)
 
 	runs->count = (int32)count;
 	for (size_t i = 0; i < count; i++) {
+		const markdown::Style& style = doc.runs[i].style;
 		runs->runs[i].offset = (int32)doc.runs[i].offset;
-		runs->runs[i].font = FontFor(doc.runs[i].style);
-		runs->runs[i].color = ColorFor(doc.runs[i].style);
+		runs->runs[i].font = FontFor(style);
+		runs->runs[i].color = style.link ? fLinkColor
+			: (style.quote ? fQuoteColor : fTextColor);
 	}
 
 	// Keep the reading position when the preview refreshes while typing.
@@ -97,4 +152,27 @@ MarkdownView::SetMarkdown(const char* text, size_t length)
 
 	if (position > 0)
 		ScrollTo(0, position);
+}
+
+
+// The link under the mouse, if any. The character is chosen by which side of
+// the nearest boundary the pointer is on, so a click only counts on the glyph.
+const std::string*
+MarkdownView::_UrlAt(BPoint where) const
+{
+	int32 offset = OffsetAt(where);
+	BPoint boundary = PointAt(offset);
+	int32 character = where.x < boundary.x ? offset - 1 : offset;
+	if (character < 0 || character >= TextLength())
+		return NULL;
+
+	for (size_t i = fRuns.size(); i > 0; i--) {
+		if (fRuns[i - 1].offset <= (size_t)character) {
+			int url = fRuns[i - 1].style.url;
+			if (url >= 0 && (size_t)url < fUrls.size())
+				return &fUrls[url];
+			return NULL;
+		}
+	}
+	return NULL;
 }

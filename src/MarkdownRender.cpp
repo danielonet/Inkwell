@@ -30,6 +30,12 @@ public:
 		fDoc.text += text;
 	}
 
+	int AddUrl(const std::string& url)
+	{
+		fDoc.urls.push_back(url);
+		return (int)fDoc.urls.size() - 1;
+	}
+
 	bool Empty() const { return fDoc.text.empty(); }
 	Document& Doc() { return fDoc; }
 
@@ -131,6 +137,44 @@ FindParenEnd(const std::string& s, size_t open, size_t end)
 }
 
 
+// "(url)" contents: drop an optional title ("url \"title\"") and <> wrapping.
+std::string
+LinkTarget(const std::string& raw)
+{
+	std::string url = Trim(raw);
+	if (!url.empty() && url[0] == '<') {
+		size_t close = url.find('>');
+		if (close != std::string::npos)
+			return url.substr(1, close - 1);
+	}
+	size_t space = url.find(' ');
+	if (space != std::string::npos)
+		url = url.substr(0, space);
+	return url;
+}
+
+
+// <scheme:rest> or <user@host>.
+bool
+IsAutolink(const std::string& t)
+{
+	if (t.empty() || t.find(' ') != std::string::npos)
+		return false;
+	size_t colon = t.find(':');
+	if (colon != std::string::npos && colon >= 2 && colon + 1 < t.size()) {
+		for (size_t i = 0; i < colon; i++) {
+			if (!isalnum((unsigned char)t[i]) && t[i] != '+' && t[i] != '.'
+				&& t[i] != '-') {
+				return false;
+			}
+		}
+		return isalpha((unsigned char)t[0]) != 0;
+	}
+	size_t at = t.find('@');
+	return at != std::string::npos && at > 0 && at + 1 < t.size();
+}
+
+
 void
 ParseInline(const std::string& s, size_t begin, size_t end, const Style& style,
 	Builder& out)
@@ -219,6 +263,22 @@ ParseInline(const std::string& s, size_t begin, size_t end, const Style& style,
 			continue;
 		}
 
+		if (c == '<') {
+			size_t close = s.find('>', i + 1);
+			if (close != std::string::npos && close < end
+				&& IsAutolink(s.substr(i + 1, close - i - 1))) {
+				out.Add(literal, style);
+				literal.clear();
+				std::string url = s.substr(i + 1, close - i - 1);
+				Style inner = style;
+				inner.link = true;
+				inner.url = out.AddUrl(url);
+				out.Add(url, inner);
+				i = close + 1;
+				continue;
+			}
+		}
+
 		if (c == '[' || (c == '!' && i + 1 < end && s[i + 1] == '[')) {
 			bool image = c == '!';
 			size_t open = image ? i + 1 : i;
@@ -230,10 +290,15 @@ ParseInline(const std::string& s, size_t begin, size_t end, const Style& style,
 					out.Add(literal, style);
 					literal.clear();
 					Style inner = style;
-					if (image)
+					if (image) {
 						inner.italic = true;
-					else
+					} else {
+						std::string url = LinkTarget(s.substr(closeBracket + 2,
+							closeParen - (closeBracket + 2)));
 						inner.link = true;
+						if (!url.empty())
+							inner.url = out.AddUrl(url);
+					}
 					ParseInline(s, open + 1, closeBracket, inner, out);
 					i = closeParen + 1;
 					continue;
