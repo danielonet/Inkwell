@@ -126,9 +126,9 @@ main()
 		CHECK(!Has(d, "#"));
 	}
 	{
-		// Hebrew with underscores must not be treated as word boundary.
-		Document d = Render("\xD7\xA9\xD7\x9C\xD7\x95\xD7\x9D_\xD7\xA2\xD7\x95\xD7\x9C\xD7\x9D");
-		CHECK(d.text.find('_') != std::string::npos);
+		// Underscores between non-ASCII letters (UTF-8) are not emphasis.
+		Document d = Render("caf\xC3\xA9_cr\xC3\xA8me_br\xC3\xBBl\xC3\xA9e");
+		CHECK(d.text == "caf\xC3\xA9_cr\xC3\xA8me_br\xC3\xBBl\xC3\xA9e\n");
 	}
 	{
 		Document d = Render("");

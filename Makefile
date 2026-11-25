@@ -23,7 +23,7 @@ LIBS = be tracker localestub $(STDCPPLIBS)
 LIBPATHS =
 LOCAL_INCLUDE_PATHS = src
 
-# Add language codes here once locales/<code>.catkeys exist, e.g. LOCALES = en he
+# Add language codes here once locales/<code>.catkeys exist, e.g. LOCALES = en
 LOCALES =
 
 OPTIMIZE := FULL

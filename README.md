@@ -45,7 +45,6 @@ and are tested anywhere:
 - Markdown: tables, nested quotes, list continuation lines
 - RTF: font families, text color and alignment commands
 - Themes: sidebar and window chrome, more palettes
-- Hebrew translation
 
 ## Publishing to HaikuDepot
 

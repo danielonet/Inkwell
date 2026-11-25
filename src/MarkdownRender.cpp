@@ -47,7 +47,7 @@ private:
 bool
 IsWordChar(char c)
 {
-	// Bytes >= 0x80 are parts of multi-byte letters (e.g. Hebrew): word chars.
+	// Bytes >= 0x80 are parts of multi-byte UTF-8 letters: treat as word chars.
 	return isalnum((unsigned char)c) || (unsigned char)c >= 0x80;
 }
 
