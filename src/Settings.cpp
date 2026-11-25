@@ -36,30 +36,74 @@ Load(BMessage* settings)
 }
 
 
-BString
-Settings::LoadTheme()
+static void
+Save(const BMessage& settings)
 {
-	BMessage settings;
-	Load(&settings);
-
-	BString theme;
-	settings.FindString("theme", &theme);
-	return theme;
-}
-
-
-void
-Settings::SaveTheme(const char* themeId)
-{
-	BMessage settings;
-	Load(&settings);
-	settings.RemoveName("theme");
-	settings.AddString("theme", themeId);
-
 	BPath path;
 	if (SettingsPath(&path) != B_OK)
 		return;
 	BFile file(path.Path(), B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
 	if (file.InitCheck() == B_OK)
 		settings.Flatten(&file);
+}
+
+
+BString
+Settings::GetString(const char* key)
+{
+	BMessage settings;
+	Load(&settings);
+
+	BString value;
+	settings.FindString(key, &value);
+	return value;
+}
+
+
+void
+Settings::SetString(const char* key, const char* value)
+{
+	BMessage settings;
+	Load(&settings);
+	settings.RemoveName(key);
+	settings.AddString(key, value);
+	Save(settings);
+}
+
+
+bool
+Settings::GetBool(const char* key, bool defaultValue)
+{
+	BMessage settings;
+	Load(&settings);
+
+	bool value;
+	if (settings.FindBool(key, &value) != B_OK)
+		return defaultValue;
+	return value;
+}
+
+
+void
+Settings::SetBool(const char* key, bool value)
+{
+	BMessage settings;
+	Load(&settings);
+	settings.RemoveName(key);
+	settings.AddBool(key, value);
+	Save(settings);
+}
+
+
+BString
+Settings::LoadTheme()
+{
+	return GetString("theme");
+}
+
+
+void
+Settings::SaveTheme(const char* themeId)
+{
+	SetString("theme", themeId);
 }

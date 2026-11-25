@@ -4,6 +4,9 @@ linked files and folders. Files open in tabs, with support for Markdown, \
 rich text and plain text, and selectable color themes."
 HOMEPAGE="https://github.com/danielonet/Inkwell"
 COPYRIGHT="2026 Daniel Dreichlinger"
+# Inkwell itself is MIT. The bundled en_US dictionary (dictionaries/) is derived
+# from SCOWL/Ispell/WordNet, which are permissive; see dictionaries/en_US.LICENSE.
+# TODO: check how HaikuPorts wants that license listed before submitting.
 LICENSE="MIT"
 REVISION="1"
 SOURCE_URI="https://github.com/danielonet/Inkwell/archive/v$portVersion.tar.gz"
@@ -43,5 +46,7 @@ INSTALL()
 {
 	mkdir -p $appsDir
 	cp objects/Inkwell $appsDir
+	mkdir -p $dataDir/Inkwell/dictionaries
+	cp dictionaries/* $dataDir/Inkwell/dictionaries
 	addAppDeskbarSymlink $appsDir/Inkwell Inkwell
 }

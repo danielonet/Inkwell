@@ -27,6 +27,7 @@
 #include "MarkdownView.h"
 #include "Settings.h"
 #include "SidebarView.h"
+#include "SpellService.h"
 #include "Theme.h"
 
 #undef B_TRANSLATION_CONTEXT
@@ -45,7 +46,9 @@ enum {
 	MSG_ITALIC			= 'ital',
 	MSG_UNDERLINE		= 'undl',
 	MSG_BIGGER			= 'bigr',
-	MSG_SMALLER			= 'smlr'
+	MSG_SMALLER			= 'smlr',
+	MSG_TOGGLE_SPELL	= 'tgsp',
+	MSG_SET_LANGUAGE	= 'stlg'
 };
 
 
@@ -59,6 +62,8 @@ MainWindow::MainWindow()
 	fPreviewItem(NULL),
 	fThemeMenu(NULL),
 	fFormatMenu(NULL),
+	fSpellItem(NULL),
+	fLanguageMenu(NULL),
 	fThemeIndex(ThemeIndexForId(Settings::LoadTheme().String())),
 	fFolderPanel(NULL)
 {
@@ -161,6 +166,26 @@ MainWindow::MessageReceived(BMessage* message)
 			break;
 		}
 
+		case MSG_TOGGLE_SPELL:
+			SpellService::Instance().SetEnabled(
+				!SpellService::Instance().IsEnabled());
+			_RefreshSpelling();
+			break;
+
+		case MSG_SET_LANGUAGE:
+		{
+			const char* id;
+			if (message->FindString("id", &id) == B_OK
+				&& SpellService::Instance().SetLanguage(id)) {
+				_RefreshSpelling();
+			}
+			break;
+		}
+
+		case MSG_SPELLING_CHANGED:
+			_RefreshSpelling();
+			break;
+
 		case MSG_LINK_CLICKED:
 		{
 			const char* url;
@@ -216,6 +241,17 @@ MainWindow::MenusBeginning()
 
 	for (int32 i = 0; i < fThemeMenu->CountItems(); i++)
 		fThemeMenu->ItemAt(i)->SetMarked(i == fThemeIndex);
+
+	SpellService& spelling = SpellService::Instance();
+	fSpellItem->SetMarked(spelling.IsEnabled());
+	for (int32 i = 0; i < fLanguageMenu->CountItems(); i++) {
+		BMenuItem* item = fLanguageMenu->ItemAt(i);
+		const char* id;
+		BMessage* message = item->Message();
+		item->SetMarked(message != NULL
+			&& message->FindString("id", &id) == B_OK
+			&& spelling.CurrentLanguage() == id);
+	}
 }
 
 
@@ -280,6 +316,30 @@ MainWindow::_BuildMenuBar()
 	fFormatMenu->AddItem(new BMenuItem(B_TRANSLATE("Smaller"),
 		new BMessage(MSG_SMALLER), '-'));
 	bar->AddItem(fFormatMenu);
+
+	BMenu* spellingMenu = new BMenu(B_TRANSLATE("Spelling"));
+	fSpellItem = new BMenuItem(B_TRANSLATE("Check spelling while typing"),
+		new BMessage(MSG_TOGGLE_SPELL));
+	spellingMenu->AddItem(fSpellItem);
+
+	// Dictionaries found on disk; users can add their own (see README).
+	fLanguageMenu = new BMenu(B_TRANSLATE("Language"));
+	const std::vector<SpellService::Language>& languages
+		= SpellService::Instance().Languages();
+	for (size_t i = 0; i < languages.size(); i++) {
+		BMessage* message = new BMessage(MSG_SET_LANGUAGE);
+		message->AddString("id", languages[i].id.String());
+		fLanguageMenu->AddItem(new BMenuItem(languages[i].id.String(),
+			message));
+	}
+	if (languages.empty()) {
+		BMenuItem* none = new BMenuItem(B_TRANSLATE("No dictionaries found"),
+			NULL);
+		none->SetEnabled(false);
+		fLanguageMenu->AddItem(none);
+	}
+	spellingMenu->AddItem(fLanguageMenu);
+	bar->AddItem(spellingMenu);
 
 	return bar;
 }
@@ -520,4 +580,17 @@ MainWindow::_OpenLink(const char* url)
 		_OpenFile(ref);
 	} else
 		ShowError(B_TRANSLATE("The linked file could not be found."));
+}
+
+
+// After toggling spell checking, switching language or adding a word.
+void
+MainWindow::_RefreshSpelling()
+{
+	for (int32 i = 0; i < fTabView->CountTabs(); i++) {
+		EditorView* editor
+			= dynamic_cast<EditorView*>(fTabView->TabAt(i)->View());
+		if (editor != NULL)
+			editor->UpdateSpelling();
+	}
 }

@@ -5,10 +5,13 @@
 
 #include "EditorView.h"
 
+#include <Catalog.h>
 #include <File.h>
 #include <LayoutBuilder.h>
 #include <Message.h>
+#include <MenuItem.h>
 #include <MessageRunner.h>
+#include <PopUpMenu.h>
 #include <ScrollView.h>
 #include <SplitView.h>
 #include <Window.h>
@@ -19,11 +22,24 @@
 
 #include "MarkdownView.h"
 #include "Rtf.h"
+#include "SpellService.h"
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "EditorView"
 
 
 static const bigtime_t kPreviewDelay = 250000;	// 0.25 s after the last edit
 static const float kMinFontSize = 6.0f;
 static const float kMaxFontSize = 96.0f;
+static const bigtime_t kSpellDelay = 500000;	// 0.5 s after the last edit
+static const size_t kMaxSpellCheckBytes = 2 * 1024 * 1024;
+static const rgb_color kSquiggleColor = {200, 30, 30, 255};
+
+enum {
+	MSG_SPELL_CHECK		= 'spck',
+	MSG_SPELL_REPLACE	= 'sprp',
+	MSG_SPELL_ADD		= 'spad'
+};
 
 
 // #pragma mark - EditorText
@@ -33,8 +49,17 @@ EditorText::EditorText(const char* name)
 	:
 	BTextView(name),
 	fModified(false),
-	fTextColor(ui_color(B_DOCUMENT_TEXT_COLOR))
+	fTextColor(ui_color(B_DOCUMENT_TEXT_COLOR)),
+	fSpellActive(false),
+	fMarkdown(false),
+	fSpellRunner(NULL)
 {
+}
+
+
+EditorText::~EditorText()
+{
+	delete fSpellRunner;
 }
 
 
@@ -163,6 +188,10 @@ EditorText::InsertText(const char* text, int32 length, int32 offset,
 	SetModified(true);
 	if (fChangeTarget.IsValid())
 		fChangeTarget.SendMessage(MSG_TEXT_CHANGED);
+	if (fSpellActive) {
+		_ShiftMisspellings(offset, length);
+		_ScheduleSpellCheck();
+	}
 }
 
 
@@ -173,6 +202,254 @@ EditorText::DeleteText(int32 fromOffset, int32 toOffset)
 	SetModified(true);
 	if (fChangeTarget.IsValid())
 		fChangeTarget.SendMessage(MSG_TEXT_CHANGED);
+	if (fSpellActive) {
+		// Drop what overlaps the removed text, then close the gap.
+		int32 removed = toOffset - fromOffset;
+		std::vector<spell::Range> kept;
+		for (size_t i = 0; i < fMisspelled.size(); i++) {
+			const spell::Range& r = fMisspelled[i];
+			if ((int32)r.end <= fromOffset) {
+				kept.push_back(r);
+			} else if ((int32)r.begin >= toOffset) {
+				spell::Range moved;
+				moved.begin = r.begin - removed;
+				moved.end = r.end - removed;
+				kept.push_back(moved);
+			}
+		}
+		fMisspelled.swap(kept);
+		_ScheduleSpellCheck();
+	}
+}
+
+
+// #pragma mark - EditorText: spell checking
+
+
+void
+EditorText::SetSpellChecking(bool active, bool markdown)
+{
+	fSpellActive = active;
+	fMarkdown = markdown;
+
+	delete fSpellRunner;
+	fSpellRunner = NULL;
+
+	if (active)
+		_RunSpellCheck();
+	else {
+		fMisspelled.clear();
+		Invalidate();
+	}
+}
+
+
+void
+EditorText::_ScheduleSpellCheck()
+{
+	if (fSpellRunner != NULL)
+		return;
+
+	BMessage check(MSG_SPELL_CHECK);
+	fSpellRunner = new BMessageRunner(BMessenger(this), &check, kSpellDelay, 1);
+	if (fSpellRunner->InitCheck() != B_OK) {
+		delete fSpellRunner;
+		fSpellRunner = NULL;
+	}
+}
+
+
+void
+EditorText::_RunSpellCheck()
+{
+	fMisspelled.clear();
+
+	const spell::Dictionary* dictionary
+		= SpellService::Instance().Dictionary();
+	if (dictionary != NULL && (size_t)TextLength() <= kMaxSpellCheckBytes) {
+		fMisspelled = spell::FindMisspellings(*dictionary,
+			std::string(Text(), (size_t)TextLength()), fMarkdown);
+	}
+	Invalidate();
+}
+
+
+// Text was inserted at `offset`: keep the underlines on the right words until
+// the next check runs. A word that was edited in the middle is dropped.
+void
+EditorText::_ShiftMisspellings(int32 offset, int32 delta)
+{
+	std::vector<spell::Range> kept;
+	for (size_t i = 0; i < fMisspelled.size(); i++) {
+		spell::Range r = fMisspelled[i];
+		if ((int32)r.end <= offset) {
+			kept.push_back(r);
+		} else if ((int32)r.begin >= offset) {
+			r.begin += delta;
+			r.end += delta;
+			kept.push_back(r);
+		}
+	}
+	fMisspelled.swap(kept);
+}
+
+
+const spell::Range*
+EditorText::_MisspellingAt(int32 offset) const
+{
+	for (size_t i = 0; i < fMisspelled.size(); i++) {
+		if ((int32)fMisspelled[i].begin <= offset
+			&& offset <= (int32)fMisspelled[i].end) {
+			return &fMisspelled[i];
+		}
+	}
+	return NULL;
+}
+
+
+void
+EditorText::Draw(BRect updateRect)
+{
+	BTextView::Draw(updateRect);
+	if (!fSpellActive || fMisspelled.empty())
+		return;
+
+	PushState();
+	SetHighColor(kSquiggleColor);
+	for (size_t i = 0; i < fMisspelled.size(); i++) {
+		float startHeight;
+		float endHeight;
+		BPoint start = PointAt((int32)fMisspelled[i].begin, &startHeight);
+		BPoint end = PointAt((int32)fMisspelled[i].end, &endHeight);
+		if (start.y != end.y)
+			continue;	// word wrapped across lines: skip the underline
+
+		float y = start.y + startHeight - 1;
+		if (y < updateRect.top - 2 || y > updateRect.bottom + 2)
+			continue;
+
+		// Zigzag, two pixels per half wave.
+		bool up = false;
+		BPoint previous(start.x, y);
+		for (float x = start.x + 2; x < end.x + 2; x += 2) {
+			BPoint next(x < end.x ? x : end.x, up ? y : y - 2);
+			StrokeLine(previous, next);
+			previous = next;
+			up = !up;
+		}
+	}
+	PopState();
+}
+
+
+void
+EditorText::MouseDown(BPoint where)
+{
+	uint32 buttons = 0;
+	BMessage* current = Window() != NULL ? Window()->CurrentMessage() : NULL;
+	if (current != NULL)
+		current->FindInt32("buttons", (int32*)&buttons);
+
+	if (fSpellActive && (buttons & B_SECONDARY_MOUSE_BUTTON) != 0) {
+		const spell::Range* range = _MisspellingAt(OffsetAt(where));
+		if (range != NULL) {
+			_ShowSuggestions(where, *range);
+			return;
+		}
+	}
+	BTextView::MouseDown(where);
+}
+
+
+void
+EditorText::_ShowSuggestions(BPoint where, const spell::Range& range)
+{
+	const spell::Dictionary* dictionary
+		= SpellService::Instance().Dictionary();
+	if (dictionary == NULL)
+		return;
+
+	std::string word(Text() + range.begin, range.end - range.begin);
+	std::vector<std::string> suggestions = dictionary->Suggest(word);
+
+	BPopUpMenu* menu = new BPopUpMenu("spelling", false, false);
+	for (size_t i = 0; i < suggestions.size(); i++) {
+		BMessage* message = new BMessage(MSG_SPELL_REPLACE);
+		message->AddInt32("begin", (int32)range.begin);
+		message->AddInt32("end", (int32)range.end);
+		message->AddString("word", word.c_str());
+		message->AddString("replacement", suggestions[i].c_str());
+		menu->AddItem(new BMenuItem(suggestions[i].c_str(), message));
+	}
+	if (suggestions.empty()) {
+		BMenuItem* none = new BMenuItem(B_TRANSLATE("(no suggestions)"), NULL);
+		none->SetEnabled(false);
+		menu->AddItem(none);
+	}
+	menu->AddSeparatorItem();
+
+	BMessage* add = new BMessage(MSG_SPELL_ADD);
+	add->AddString("word", word.c_str());
+	menu->AddItem(new BMenuItem(B_TRANSLATE("Add to dictionary"), add));
+
+	menu->SetTargetForItems(this);
+	// Asynchronous: the menu deletes itself when it closes.
+	menu->Go(ConvertToScreen(where), true, true, true);
+}
+
+
+void
+EditorText::MessageReceived(BMessage* message)
+{
+	switch (message->what) {
+		case MSG_SPELL_CHECK:
+			delete fSpellRunner;
+			fSpellRunner = NULL;
+			if (fSpellActive)
+				_RunSpellCheck();
+			break;
+
+		case MSG_SPELL_REPLACE:
+		{
+			int32 begin;
+			int32 end;
+			const char* word;
+			const char* replacement;
+			if (message->FindInt32("begin", &begin) != B_OK
+				|| message->FindInt32("end", &end) != B_OK
+				|| message->FindString("word", &word) != B_OK
+				|| message->FindString("replacement", &replacement) != B_OK) {
+				break;
+			}
+
+			// The text may have changed while the menu was open.
+			if (begin < 0 || end > TextLength() || end <= begin
+				|| std::string(Text() + begin, end - begin) != word) {
+				break;
+			}
+			Select(begin, end);
+			Delete();
+			Insert(replacement);
+			break;
+		}
+
+		case MSG_SPELL_ADD:
+		{
+			const char* word;
+			if (message->FindString("word", &word) != B_OK)
+				break;
+			SpellService::Instance().AddPersonalWord(word);
+			_RunSpellCheck();
+			// Other open tabs should forget the word too.
+			if (fTarget.IsValid())
+				fTarget.SendMessage(MSG_SPELLING_CHANGED);
+			break;
+		}
+
+		default:
+			BTextView::MessageReceived(message);
+			break;
+	}
 }
 
 
@@ -312,6 +589,16 @@ EditorView::SetPreviewShown(bool show)
 
 
 void
+EditorView::UpdateSpelling()
+{
+	SpellService& service = SpellService::Instance();
+	bool active = service.IsEnabled() && SpellService::IsProseFile(fRef.name)
+		&& service.Dictionary() != NULL;
+	fText->SetSpellChecking(active, fPreview != NULL);
+}
+
+
+void
 EditorView::ApplyTheme(const Theme& theme)
 {
 	fText->ApplyTheme(theme);
@@ -376,6 +663,7 @@ EditorView::Load()
 
 	fText->SetModified(false);
 	_UpdatePreview();
+	UpdateSpelling();
 	return B_OK;
 }
 

@@ -5,3 +5,4 @@ objects.*/
 .DS_Store
 tests/markdown_test
 tests/rtf_test
+tests/spell_test

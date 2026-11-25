@@ -12,7 +12,9 @@
 #include <View.h>
 
 #include <string>
+#include <vector>
 
+#include "Spell.h"
 #include "Theme.h"
 
 class BMessageRunner;
@@ -24,7 +26,8 @@ class MarkdownView;
 enum {
 	MSG_MODIFIED_CHANGED	= 'edmc',
 	MSG_TEXT_CHANGED		= 'edtc',	// every edit, sent to the change target
-	MSG_PREVIEW_UPDATE		= 'edpu'
+	MSG_PREVIEW_UPDATE		= 'edpu',
+	MSG_SPELLING_CHANGED	= 'edsc'	// personal word added: recheck all tabs
 };
 
 
@@ -32,6 +35,11 @@ enum {
 class EditorText : public BTextView {
 public:
 								EditorText(const char* name);
+	virtual						~EditorText();
+
+	virtual	void				MessageReceived(BMessage* message);
+	virtual	void				Draw(BRect updateRect);
+	virtual	void				MouseDown(BPoint where);
 
 			bool				IsModified() const { return fModified; }
 			void				SetModified(bool modified);
@@ -45,16 +53,31 @@ public:
 			void				ToggleFace(uint16 face);
 			void				ChangeSize(float delta);
 
+			// Red squiggles under misspelled words, suggestions on right click.
+			void				SetSpellChecking(bool active, bool markdown);
+
 protected:
 	virtual	void				InsertText(const char* text, int32 length,
 									int32 offset, const text_run_array* runs);
 	virtual	void				DeleteText(int32 fromOffset, int32 toOffset);
 
 private:
+			void				_ScheduleSpellCheck();
+			void				_RunSpellCheck();
+			void				_ShiftMisspellings(int32 offset, int32 delta);
+			const spell::Range*	_MisspellingAt(int32 offset) const;
+			void				_ShowSuggestions(BPoint where,
+									const spell::Range& range);
+
 			bool				fModified;
 			rgb_color			fTextColor;
 			BMessenger			fTarget;
 			BMessenger			fChangeTarget;
+
+			bool				fSpellActive;
+			bool				fMarkdown;
+			std::vector<spell::Range> fMisspelled;
+			BMessageRunner*		fSpellRunner;
 };
 
 
@@ -78,6 +101,9 @@ public:
 			void				SetPreviewShown(bool show);
 
 			void				ApplyTheme(const Theme& theme);
+
+			// Re-reads the spell checking settings (on/off, language, words).
+			void				UpdateSpelling();
 
 			status_t			Load();
 			status_t			Save();

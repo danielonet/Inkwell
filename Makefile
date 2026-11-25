@@ -14,6 +14,8 @@ SRCS = \
 	src/MarkdownView.cpp \
 	src/Rtf.cpp \
 	src/Settings.cpp \
+	src/Spell.cpp \
+	src/SpellService.cpp \
 	src/Theme.cpp
 
 RDEFS = Inkwell.rdef

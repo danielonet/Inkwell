@@ -34,6 +34,7 @@ private:
 			bool				_ConfirmClose(EditorView* editor);
 			void				_OpenLink(const char* url);
 			void				_SetTheme(int index);
+			void				_RefreshSpelling();
 			void				_UpdateTabLabels();
 
 			BMenuBar*			fMenuBar;
@@ -42,6 +43,8 @@ private:
 			BMenuItem*			fPreviewItem;
 			BMenu*				fThemeMenu;
 			BMenu*				fFormatMenu;
+			BMenuItem*			fSpellItem;
+			BMenu*				fLanguageMenu;
 			int					fThemeIndex;
 			BFilePanel*			fFolderPanel;
 };
