@@ -1,0 +1,47 @@
+SUMMARY="A text editor for Markdown, RTF and plain text"
+DESCRIPTION="Inkwell is a native Haiku text editor built around a sidebar of \
+linked files and folders. Files open in tabs, with support for Markdown, \
+rich text and plain text, and selectable color themes."
+HOMEPAGE="https://github.com/danielonet/Inkwell"
+COPYRIGHT="2026 Daniel Dreichlinger"
+LICENSE="MIT"
+REVISION="1"
+SOURCE_URI="https://github.com/danielonet/Inkwell/archive/v$portVersion.tar.gz"
+# Fill in after tagging a release: sha256sum of the downloaded tarball.
+CHECKSUM_SHA256="TODO"
+SOURCE_FILENAME="inkwell-$portVersion.tar.gz"
+SOURCE_DIR="Inkwell-$portVersion"
+
+# Uses C++11 and the STL, so no x86_gcc2.
+ARCHITECTURES="x86_64 ?arm64 ?riscv64"
+
+PROVIDES="
+	inkwell = $portVersion
+	app:Inkwell = $portVersion
+	"
+REQUIRES="
+	haiku
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	makefile_engine
+	cmd:g++
+	cmd:make
+	cmd:mkdepend
+	"
+BUILD_PREREQUIRES="
+	cmd:findpaths
+	"
+
+BUILD()
+{
+	make OBJ_DIR=objects
+}
+
+INSTALL()
+{
+	mkdir -p $appsDir
+	cp objects/Inkwell $appsDir
+	addAppDeskbarSymlink $appsDir/Inkwell Inkwell
+}

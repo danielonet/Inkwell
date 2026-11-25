@@ -1,0 +1,6 @@
+objects/
+objects.*/
+*.o
+*.hpkg
+.DS_Store
+tests/markdown_test
